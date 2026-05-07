@@ -4,7 +4,9 @@ from datetime import date, datetime, timedelta, timezone
 
 import requests
 
-from src.api.hevy import _parse_iso_utc
+
+def _parse_iso_utc(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
 def mcp_configured():

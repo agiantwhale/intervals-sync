@@ -2,8 +2,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI
-from src.api.hevy import _parse_iso_utc
+from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI, _parse_iso_utc
 
 
 def normalize_title(title):
