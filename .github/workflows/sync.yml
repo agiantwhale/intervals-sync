@@ -23,4 +23,7 @@ jobs:
           INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
           NS_URL: ${{ secrets.NS_URL }}
           NS_TOKEN: ${{ secrets.NS_TOKEN }}
-        run: python sync_glucose.py
+          HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
+        run: |
+          python sync_glucose.py
+          python sync_hevy.py
