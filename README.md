@@ -35,18 +35,17 @@ Configure these GitHub Actions secrets:
 
 | Secret | Used by | Purpose |
 | --- | --- | --- |
-| `INTERVALS_ID` | both | Intervals.icu athlete ID |
-| `INTERVALS_API_KEY` | both | Intervals.icu API key |
-| `NS_URL` | glucose | Nightscout base URL |
-| `NS_TOKEN` | glucose | Nightscout token |
-| `HEVY_API_KEY` | hevy | Hevy API key |
+| `FITNESS_MCP_URL` | both | Optional fitness-mcp Worker URL |
+| `FITNESS_MCP_TOKEN` | both | Optional static bearer token for fitness-mcp |
 
 Both workflows run every 5 minutes and can also be run manually from GitHub
 Actions.
 
+The MCP server repository is [fitness-mcp](https://github.com/agiantwhale/fitness-mcp).
+
 ## Local Usage
 
-Create a local `.env` file with the same values as the GitHub secrets, then run:
+Create a local `.env` file with the MCP values, then run:
 
 ```bash
 set -a
@@ -55,6 +54,13 @@ set +a
 
 .venv/bin/python sync_glucose.py
 .venv/bin/python sync_hevy.py
+```
+
+The only required runtime values are:
+
+```bash
+FITNESS_MCP_URL=https://fitness-mcp.agiantwhale.workers.dev
+FITNESS_MCP_TOKEN=...
 ```
 
 The Hevy lookback window defaults to 7 days. Override it with:
@@ -66,8 +72,9 @@ HEVY_SYNC_DAYS=14 .venv/bin/python sync_hevy.py
 ## Development Checks
 
 ```bash
-.venv/bin/python -m py_compile sync_glucose.py sync_hevy.py src/api/intervals.py src/api/nightscout.py src/api/hevy.py test_sync_local.py
+.venv/bin/python -m py_compile sync_glucose.py sync_hevy.py src/api/*.py test_sync_local.py
 .venv/bin/python -m unittest test_sync_local.py
 ```
 
-Only `requests` is required in GitHub Actions.
+Only `requests` is required in GitHub Actions, and only the MCP endpoint/token
+are required for these sync jobs.

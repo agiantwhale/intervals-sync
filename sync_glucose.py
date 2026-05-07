@@ -1,8 +1,7 @@
 import bisect
 from datetime import datetime, timedelta
 
-from src.api.intervals import IntervalsAPI
-from src.api.nightscout import NightscoutAPI
+from src.api.fitness_mcp import MCPIntervalsAPI, MCPNightscoutAPI
 
 
 def stream_exists(activity):
@@ -41,8 +40,8 @@ def linear_interpolate(time_values, seconds, values):
 
 def sync_glucose():
     # Load configuration from environment
-    intervals = IntervalsAPI()
-    nightscout = NightscoutAPI()
+    intervals = MCPIntervalsAPI()
+    nightscout = MCPNightscoutAPI()
     
     # Fetch activities from the last 3 days
     oldest = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')

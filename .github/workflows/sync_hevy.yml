@@ -19,7 +19,6 @@ jobs:
         run: pip install requests
       - name: Run Sync
         env:
-          INTERVALS_ID: ${{ secrets.INTERVALS_ID }}
-          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
-          HEVY_API_KEY: ${{ secrets.HEVY_API_KEY }}
+          FITNESS_MCP_URL: ${{ secrets.FITNESS_MCP_URL }}
+          FITNESS_MCP_TOKEN: ${{ secrets.FITNESS_MCP_TOKEN }}
         run: python sync_hevy.py

@@ -19,8 +19,6 @@ jobs:
         run: pip install requests
       - name: Run Sync
         env:
-          INTERVALS_ID: ${{ secrets.INTERVALS_ID }}
-          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
-          NS_URL: ${{ secrets.NS_URL }}
-          NS_TOKEN: ${{ secrets.NS_TOKEN }}
+          FITNESS_MCP_URL: ${{ secrets.FITNESS_MCP_URL }}
+          FITNESS_MCP_TOKEN: ${{ secrets.FITNESS_MCP_TOKEN }}
         run: python sync_glucose.py

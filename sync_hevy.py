@@ -2,8 +2,8 @@ import os
 import sys
 from datetime import datetime, timedelta
 
-from src.api.hevy import HevyAPI, _parse_iso_utc
-from src.api.intervals import IntervalsAPI
+from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI
+from src.api.hevy import _parse_iso_utc
 
 
 def normalize_title(title):
@@ -151,8 +151,8 @@ def find_matching_activity(activities, workout, ext_id, start_utc, duration):
 
 
 def sync_hevy():
-    hevy = HevyAPI()
-    intervals = IntervalsAPI()
+    hevy = MCPHevyAPI()
+    intervals = MCPIntervalsAPI()
     days = int(os.environ.get("HEVY_SYNC_DAYS", "7"))
 
     workouts = list(hevy.get_recent_workouts(days=days))
