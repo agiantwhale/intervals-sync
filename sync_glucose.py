@@ -1,12 +1,43 @@
-import os
+import bisect
 from datetime import datetime, timedelta
+
 from src.api.intervals import IntervalsAPI
 from src.api.nightscout import NightscoutAPI
-from src.analysis.performance import merge_activity_data
+
 
 def stream_exists(activity):
     """Check if the bloodglucose stream is already present."""
     return 'bloodglucose' in activity.get('stream_types', [])
+
+
+def time_stream(streams):
+    for stream in streams:
+        if stream.get("type") == "time":
+            return stream.get("data") or []
+    raise ValueError("Could not find time stream")
+
+
+def linear_interpolate(time_values, seconds, values):
+    if not seconds or not values:
+        return []
+
+    result = []
+    for t in time_values:
+        idx = bisect.bisect_left(seconds, t)
+        if idx == 0:
+            result.append(values[0])
+        elif idx == len(seconds):
+            result.append(values[-1])
+        else:
+            t0, t1 = seconds[idx - 1], seconds[idx]
+            v0, v1 = values[idx - 1], values[idx]
+            if t1 == t0:
+                result.append(v1)
+            else:
+                weight = (t - t0) / (t1 - t0)
+                result.append(v0 + weight * (v1 - v0))
+    return result
+
 
 def sync_glucose():
     # Load configuration from environment
@@ -44,12 +75,9 @@ def sync_glucose():
                 print(f"   Could not retrieve streams for activity {a_id}: {streams}")
                 continue
 
-            # Interpolate data to match the activity's time stream using our new pandas-based merger
+            # Interpolate data to match the activity's time stream
             try:
-                # Merge activity data with glucose data. 
-                # This ensures glucose is interpolated to the exact activity 'time' stream.
-                df_merged = merge_activity_data(streams, vals, secs)
-                interpolated_glucose = df_merged['bloodglucose'].tolist()
+                interpolated_glucose = linear_interpolate(time_stream(streams), secs, vals)
                 
                 # Upload the interpolated stream
                 intervals.upload_custom_stream(a_id, "bloodglucose", interpolated_glucose)

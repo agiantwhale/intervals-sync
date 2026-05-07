@@ -22,6 +22,24 @@ class IntervalsAPI:
         r.raise_for_status()
         return r.json()
 
+    def update_activity(self, activity_id, payload):
+        url = f"{INTERVALS_BASE}/activity/{activity_id}"
+        r = self.session.put(url, json=payload, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def get_activity_messages(self, activity_id):
+        url = f"{INTERVALS_BASE}/activity/{activity_id}/messages"
+        r = self.session.get(url, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    def post_activity_message(self, activity_id, message):
+        url = f"{INTERVALS_BASE}/activity/{activity_id}/messages"
+        r = self.session.post(url, json={"content": message}, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
     def get_streams(self, activity_id, types=None):
         url = f"{INTERVALS_BASE}/activity/{activity_id}/streams.json"
         params = {}

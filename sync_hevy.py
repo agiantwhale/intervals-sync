@@ -3,7 +3,7 @@ import sys
 from datetime import datetime, timedelta
 
 from src.api.hevy import HevyAPI, _parse_iso_utc
-from src.api.intervals_activities import IntervalsActivityClient
+from src.api.intervals import IntervalsAPI
 
 
 def normalize_title(title):
@@ -96,7 +96,23 @@ def has_synced_message(intervals, activity_id, workout):
     return any(marker in message_text(m) for m in messages)
 
 
+def is_strength_activity(activity):
+    activity_type = activity.get("type")
+    if activity_type is None:
+        return True
+    return normalize_title(activity_type) in {
+        "weighttraining",
+        "weight training",
+        "strength",
+        "strengthtraining",
+        "strength training",
+    }
+
+
 def activity_matches_workout(activity, start_utc, duration):
+    if not is_strength_activity(activity):
+        return False
+
     try:
         a_start = _parse_iso_utc(activity["start_date"])
         a_duration = activity.get("elapsed_time", 0)
@@ -136,7 +152,7 @@ def find_matching_activity(activities, workout, ext_id, start_utc, duration):
 
 def sync_hevy():
     hevy = HevyAPI()
-    intervals = IntervalsActivityClient()
+    intervals = IntervalsAPI()
     days = int(os.environ.get("HEVY_SYNC_DAYS", "7"))
 
     workouts = list(hevy.get_recent_workouts(days=days))
@@ -147,8 +163,8 @@ def sync_hevy():
 
     # Fetch Intervals activities for the lookback period
     oldest = (datetime.now() - timedelta(days=days + 2)).strftime("%Y-%m-%d")
-    intervals_activities = intervals.get_activities(oldest=oldest)
-    print(f"Fetched {len(intervals_activities)} activities from Intervals.icu for matching.")
+    activities = intervals.get_activities(oldest=oldest)
+    print(f"Fetched {len(activities)} activities from Intervals.icu for matching.")
 
     for w in workouts:
         ext_id = f"hevy-{w['id']}"
@@ -156,7 +172,7 @@ def sync_hevy():
         end_utc = _parse_iso_utc(w["end_time"])
         w_duration = max(int((end_utc - start_utc).total_seconds()), 0)
 
-        match = find_matching_activity(intervals_activities, w, ext_id, start_utc, w_duration)
+        match = find_matching_activity(activities, w, ext_id, start_utc, w_duration)
 
         if match:
             title = workout_title(w)
@@ -179,7 +195,7 @@ def sync_hevy():
                 "kg_lifted": kg_lifted,
             }
             try:
-                updated = intervals.update_activity(match["id"], payload)
+                intervals.update_activity(match["id"], payload)
                 if not has_message:
                     intervals.post_activity_message(match["id"], render_message(w, description))
                 print(
