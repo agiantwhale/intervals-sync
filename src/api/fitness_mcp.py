@@ -181,6 +181,48 @@ class MCPIntervalsAPI:
             "body": [{"type": stream_type, "data": data}],
         })
 
+    def get_event(self, event_id):
+        return self.client.call_tool("intervals_get_event", {
+            "eventId": int(event_id),
+        })
+
+
+class MCPStravaAPI:
+    def __init__(self, client=None):
+        self.client = client or FitnessMCPClient()
+
+    def get_activity(self, activity_id, include_all_efforts=False):
+        return self.client.call_tool("strava_get_activity", {
+            "id": int(activity_id),
+            "include_all_efforts": include_all_efforts,
+        })
+
+    def list_activities(self, after=None, before=None, per_page=200, limit=None):
+        out = []
+        page = 1
+        while True:
+            args = {"page": page, "per_page": per_page}
+            if after is not None:
+                args["after"] = int(after)
+            if before is not None:
+                args["before"] = int(before)
+            chunk = self.client.call_tool("strava_list_activities", args)
+            if not chunk:
+                return out
+            out.extend(chunk)
+            if limit is not None and len(out) >= limit:
+                return out[:limit]
+            if len(chunk) < per_page:
+                return out
+            page += 1
+
+    def update_activity(self, activity_id, **fields):
+        payload = {"id": int(activity_id)}
+        for k, v in fields.items():
+            if v is not None:
+                payload[k] = v
+        return self.client.call_tool("strava_update_activity", payload)
+
 
 class MCPNightscoutAPI:
     def __init__(self, client=None):

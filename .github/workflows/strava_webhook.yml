@@ -25,8 +25,8 @@ jobs:
           echo "subscription:  ${{ github.event.client_payload.subscription_id }}"
           echo "updates:       ${{ toJSON(github.event.client_payload.updates) }}"
 
-      # MCP fetch only makes sense for create/update — delete events have no
-      # activity to fetch, and deauthorize fires once when the athlete revokes.
+      # Sync only runs on create/update — delete has no activity to sync, and
+      # deauthorize fires once when the athlete revokes the app.
       - uses: actions/checkout@v6
         if: |
           github.event.action == 'strava-activity-create' ||
@@ -46,44 +46,11 @@ jobs:
           github.event.action == 'strava-activity-update'
         run: pip install requests
 
-      - name: Fetch Strava activity via MCP
+      - name: Sync planned-workout description into Strava
         if: |
           github.event.action == 'strava-activity-create' ||
           github.event.action == 'strava-activity-update'
         env:
           FITNESS_MCP_URL: ${{ secrets.FITNESS_MCP_URL }}
           FITNESS_MCP_TOKEN: ${{ secrets.FITNESS_MCP_TOKEN }}
-          STRAVA_ACTIVITY_ID: ${{ github.event.client_payload.object_id }}
-        run: |
-          python - <<'PY'
-          import os
-          from src.api.fitness_mcp import FitnessMCPClient
-
-          client = FitnessMCPClient()
-          activity = client.call_tool(
-              "strava_get_activity",
-              {"id": int(os.environ["STRAVA_ACTIVITY_ID"])},
-          )
-          print(f"Activity name:     {activity.get('name')}")
-          print(f"Sport type:        {activity.get('sport_type') or activity.get('type')}")
-          print(f"Distance (m):      {activity.get('distance')}")
-          print(f"Moving time (s):   {activity.get('moving_time')}")
-          print(f"Elapsed time (s):  {activity.get('elapsed_time')}")
-          print(f"Start (UTC):       {activity.get('start_date')}")
-          print(f"Athlete id:        {(activity.get('athlete') or {}).get('id')}")
-
-          # ----------------------------------------------------------------------
-          # TODO: replace this scaffold with real downstream behavior, e.g.:
-          #
-          #   from src.api.fitness_mcp import MCPIntervalsAPI
-          #   intervals = MCPIntervalsAPI()
-          #   intervals.create_manual_activity({
-          #       "external_id": f"strava-{activity['id']}",
-          #       "name":        activity["name"],
-          #       "type":        activity.get("sport_type"),
-          #       "start_date":  activity["start_date"],
-          #       "moving_time": activity.get("moving_time"),
-          #       "distance":    activity.get("distance"),
-          #   })
-          # ----------------------------------------------------------------------
-          PY
+        run: python sync_strava.py --activity-id ${{ github.event.client_payload.object_id }}
