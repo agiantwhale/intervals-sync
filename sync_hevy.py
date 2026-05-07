@@ -23,7 +23,7 @@ def calculate_kg_lifted(workout):
             if weight is None or reps is None:
                 continue
             total += weight * reps
-    return round(total, 3)
+    return round(total, 3) if total > 0 else None
 
 
 def format_set(s):
@@ -182,7 +182,7 @@ def sync_hevy():
             if (
                 match.get("description") == description
                 and match.get("name") == title
-                and match.get("kg_lifted") == kg_lifted
+                and (kg_lifted is None or match.get("kg_lifted") == kg_lifted)
                 and has_message
             ):
                 print(f" - Hevy {w['id']}: Already synced and up to date in Intervals {match['id']}. Skipping.")
@@ -192,8 +192,9 @@ def sync_hevy():
                 "name": title,
                 "description": description,
                 "external_id": ext_id,
-                "kg_lifted": kg_lifted,
             }
+            if kg_lifted is not None:
+                payload["kg_lifted"] = kg_lifted
             try:
                 intervals.update_activity(match["id"], payload)
                 if not has_message:

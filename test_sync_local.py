@@ -100,7 +100,7 @@ class TestHevySync(unittest.TestCase):
         activity_id, payload = intervals_inst.update_activity.call_args.args
         self.assertEqual(activity_id, "right_title")
         self.assertEqual(payload["name"], "Upper Body")
-        self.assertEqual(payload["kg_lifted"], 0)
+        self.assertNotIn("kg_lifted", payload)
 
     @patch('sync_hevy.HevyAPI')
     @patch('sync_hevy.IntervalsAPI')
