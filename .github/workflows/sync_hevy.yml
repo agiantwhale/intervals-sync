@@ -2,7 +2,12 @@ name: Hevy to Intervals Sync
 on:
   schedule:
     - cron: '*/5 * * * *'  # Runs every 5 minutes
-  workflow_dispatch:        # Allows you to run it manually
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to scan"
+        required: false
+        default: "7"
 
 jobs:
   sync:
@@ -21,4 +26,5 @@ jobs:
         env:
           FITNESS_MCP_URL: ${{ secrets.FITNESS_MCP_URL }}
           FITNESS_MCP_TOKEN: ${{ secrets.FITNESS_MCP_TOKEN }}
+          HEVY_SYNC_DAYS: ${{ inputs.days || '7' }}
         run: python sync_hevy.py

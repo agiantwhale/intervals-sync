@@ -97,13 +97,16 @@ class FitnessMCPClient:
     def _decode_tool_result(self, result):
         if not isinstance(result, dict):
             return result
-        content = result.get("content")
+        content = result.get("content") or []
+        text = ""
+        if content and content[0].get("type") == "text":
+            text = content[0].get("text", "")
+        if result.get("isError"):
+            raise RuntimeError(f"MCP tool error: {text or result}")
         if not content:
             return result
-        first = content[0]
-        if first.get("type") != "text":
+        if content[0].get("type") != "text":
             return result
-        text = first.get("text", "")
         try:
             return json.loads(text)
         except json.JSONDecodeError:
@@ -135,6 +138,20 @@ class MCPHevyAPI:
                 start = _parse_iso_utc(w["start_time"])
                 if start < cutoff:
                     return
+                yield w
+            page_count = data.get("page_count", page)
+            if page >= page_count:
+                return
+            page += 1
+
+    def get_all_workouts(self):
+        page = 1
+        while True:
+            data = self.get_workouts_page(page=page, page_size=10)
+            workouts = data.get("workouts", [])
+            if not workouts:
+                return
+            for w in workouts:
                 yield w
             page_count = data.get("page_count", page)
             if page >= page_count:
@@ -185,6 +202,13 @@ class MCPIntervalsAPI:
         return self.client.call_tool("intervals_get_event", {
             "eventId": int(event_id),
         })
+
+    def create_event(self, payload):
+        return self.client.call_tool("intervals_create_event", payload)
+
+    def update_event(self, event_id, payload):
+        args = {"eventId": str(event_id), **payload}
+        return self.client.call_tool("intervals_update_event", args)
 
 
 class MCPStravaAPI:
