@@ -167,13 +167,21 @@ def sync_one(activity_id):
     sync_one_activity(strava, intervals, activity, intervals_activities)
 
 
-def sync_backfill(count):
+def sync_backfill(count=None, days=None):
     strava = MCPStravaAPI()
     intervals = MCPIntervalsAPI()
 
-    activities = strava.list_activities(per_page=count, limit=count)
+    # per_page=100 keeps each chunk small enough for the MCP streamable-HTTP
+    # response; the wrapper paginates as needed.
+    if days is not None:
+        after = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+        activities = strava.list_activities(after=after, per_page=100)
+        scope = f"the last {days} day(s)"
+    else:
+        activities = strava.list_activities(per_page=100, limit=count)
+        scope = f"the last {count} activities"
     runs = [a for a in activities if is_strava_run(a)]
-    print(f"Backfill: found {len(runs)} Strava run(s) in the last {count} activities.")
+    print(f"Backfill: found {len(runs)} Strava run(s) in {scope}.")
     if not runs:
         return
 
@@ -199,6 +207,9 @@ def sync_backfill(count):
 def parse_args(argv):
     activity_id = None
     count = int(os.environ.get("STRAVA_SYNC_COUNT", "20"))
+    days = None
+    if os.environ.get("STRAVA_SYNC_DAYS"):
+        days = int(os.environ["STRAVA_SYNC_DAYS"])
     i = 0
     while i < len(argv):
         if argv[i] == "--activity-id":
@@ -207,18 +218,23 @@ def parse_args(argv):
         elif argv[i] == "--count":
             count = int(argv[i + 1])
             i += 2
+        elif argv[i] == "--days":
+            days = int(argv[i + 1])
+            i += 2
         else:
             print(f"Unknown arg: {argv[i]}", file=sys.stderr)
             sys.exit(2)
-    return activity_id, count
+    return activity_id, count, days
 
 
 def main():
-    activity_id, count = parse_args(sys.argv[1:])
+    activity_id, count, days = parse_args(sys.argv[1:])
     if activity_id is not None:
         sync_one(activity_id)
+    elif days is not None:
+        sync_backfill(days=days)
     else:
-        sync_backfill(count)
+        sync_backfill(count=count)
 
 
 if __name__ == "__main__":

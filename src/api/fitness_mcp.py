@@ -249,6 +249,7 @@ class MCPStravaAPI:
         })
 
     def list_activities(self, after=None, before=None, per_page=200, limit=None):
+        per_page = min(per_page, 200)  # Strava API cap
         out = []
         page = 1
         while True:
