@@ -1,34 +1,8 @@
 import os
 import sys
-import unicodedata
 from datetime import datetime, timedelta
 
-from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI, _parse_iso_utc
-
-
-# Hevy data sometimes returns through fitness-mcp as UTF-8 bytes decoded as
-# Latin-1 (mojibake), and Intervals.icu's event API additionally Latin-1-double-
-# encodes on store. Fold to ASCII at the boundary to keep idempotency stable.
-_PUNCT_FOLD = {
-    "–": "-", "—": "-",         # en/em dash
-    "‘": "'", "’": "'",         # curly single quotes
-    "“": '"', "”": '"',         # curly double quotes
-    "×": "x", "•": "*", "·": "*",
-}
-
-
-def _ascii_clean(s):
-    if not s:
-        return s
-    try:
-        s = s.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        pass
-    for k, v in _PUNCT_FOLD.items():
-        s = s.replace(k, v)
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return s.encode("ascii", "replace").decode("ascii").replace("?", "-")
+from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI, _ascii_clean, _parse_iso_utc
 
 
 def normalize_title(title):

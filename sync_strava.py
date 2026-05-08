@@ -14,7 +14,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
-from src.api.fitness_mcp import MCPIntervalsAPI, MCPStravaAPI, _parse_iso_utc
+from src.api.fitness_mcp import MCPIntervalsAPI, MCPStravaAPI, _ascii_clean, _parse_iso_utc
 
 
 SYNC_MARKER_PREFIX = "[strava-desc-sync:"
@@ -112,7 +112,11 @@ def sync_one_activity(strava, intervals, strava_activity, intervals_activities):
         )
         return
 
-    desc = (event.get("description") or "").strip()
+    # Sanitize: Intervals event descriptions sometimes round-trip with UTF-8
+    # bytes Latin-1-decoded; Strava further mangles non-ASCII on form-encoded
+    # writes. Fold to ASCII before sending so the displayed description is
+    # readable + idempotency comparisons stay stable.
+    desc = _ascii_clean((event.get("description") or "").strip())
     if not desc:
         print(
             f" - Strava {sid} ↔ Intervals event {event_id}: "
@@ -121,7 +125,20 @@ def sync_one_activity(strava, intervals, strava_activity, intervals_activities):
         return
 
     new_desc = build_description(desc, event_id)
-    current = (strava_activity.get("description") or "").strip()
+    # SummaryActivity (from list_activities) lacks `description`; only the
+    # detailed shape returned by get_activity has it. Refresh if missing so
+    # idempotency comparisons aren't always against an empty string.
+    current_raw = strava_activity.get("description")
+    if current_raw is None:
+        try:
+            current_raw = (strava.get_activity(sid).get("description") or "")
+        except Exception as e:
+            print(
+                f" - Strava {sid}: failed to fetch detailed activity for compare: {e}",
+                file=sys.stderr,
+            )
+            current_raw = ""
+    current = (current_raw or "").strip()
     if current == new_desc.strip():
         print(f" - Strava {sid}: already in sync with Intervals event {event_id}.")
         return

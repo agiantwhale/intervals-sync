@@ -1,5 +1,6 @@
 import json
 import os
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 
 import requests
@@ -11,6 +12,32 @@ def _parse_iso_utc(s):
 
 def mcp_configured():
     return bool(os.environ.get("FITNESS_MCP_URL") and os.environ.get("FITNESS_MCP_TOKEN"))
+
+
+# Fitness data sometimes round-trips through fitness-mcp / Intervals.icu / Strava
+# with UTF-8 bytes interpreted as Latin-1 ("mojibake"). Strava's Latin-1 form
+# decoding adds another layer on top, breaking display + idempotency. Fold to
+# ASCII at the boundary to keep things stable.
+_PUNCT_FOLD = {
+    "–": "-", "—": "-",         # en/em dash
+    "‘": "'", "’": "'",         # curly single quotes
+    "“": '"', "”": '"',         # curly double quotes
+    "×": "x", "•": "*", "·": "*",
+}
+
+
+def _ascii_clean(s):
+    if not s:
+        return s
+    try:
+        s = s.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    for k, v in _PUNCT_FOLD.items():
+        s = s.replace(k, v)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.encode("ascii", "replace").decode("ascii").replace("?", "-")
 
 
 class FitnessMCPClient:
