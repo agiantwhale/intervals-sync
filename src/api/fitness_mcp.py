@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import unicodedata
 from datetime import date, datetime, timedelta, timezone
 
@@ -14,30 +15,66 @@ def mcp_configured():
     return bool(os.environ.get("FITNESS_MCP_URL") and os.environ.get("FITNESS_MCP_TOKEN"))
 
 
-# Fitness data sometimes round-trips through fitness-mcp / Intervals.icu / Strava
-# with UTF-8 bytes interpreted as Latin-1 ("mojibake"). Strava's Latin-1 form
-# decoding adds another layer on top, breaking display + idempotency. Fold to
-# ASCII at the boundary to keep things stable.
+# Intervals.icu sometimes returns descriptions whose UTF-8 bytes were
+# Latin-1-decoded upstream, producing mojibake like "Ã©" for "é". Reverse
+# that pass before any other text handling.
 _PUNCT_FOLD = {
-    "–": "-", "—": "-",         # en/em dash
-    "‘": "'", "’": "'",         # curly single quotes
-    "“": '"', "”": '"',         # curly double quotes
+    "–": "-", "—": "-",
+    "‘": "'", "’": "'",
+    "“": '"', "”": '"',
     "×": "x", "•": "*", "·": "*",
 }
+
+
+def _repair_mojibake(s):
+    if not s:
+        return s
+    try:
+        return s.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
 
 
 def _ascii_clean(s):
     if not s:
         return s
-    try:
-        s = s.encode("latin-1").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        pass
+    s = _repair_mojibake(s)
     for k, v in _PUNCT_FOLD.items():
         s = s.replace(k, v)
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
     return s.encode("ascii", "replace").decode("ascii").replace("?", "-")
+
+
+_MD_BULLET_RE = re.compile(r"^([ \t]*)[-*+][ \t]+", re.MULTILINE)
+_MD_HEADER_RE = re.compile(r"^[ \t]*#{1,6}[ \t]+", re.MULTILINE)
+_MD_BOLD_STAR_RE = re.compile(r"\*\*([^\n*]+?)\*\*")
+_MD_BOLD_UNDER_RE = re.compile(r"__([^\n_]+?)__")
+_MD_ITALIC_STAR_RE = re.compile(r"(?<![\w*])\*(?!\s)([^\n*]+?)(?<!\s)\*(?![\w*])")
+_MD_ITALIC_UNDER_RE = re.compile(r"(?<![\w_])_(?!\s)([^\n_]+?)(?<!\s)_(?![\w_])")
+_MD_CODE_RE = re.compile(r"`([^`\n]+?)`")
+_MD_LINK_RE = re.compile(r"\[([^\]\n]+)\]\(([^)\s]+)\)")
+
+
+def _strip_markdown(s):
+    """Render Markdown markup as plain text for clients that do not parse it
+    (e.g. Strava). Bullet lists become 4-space indent + U+2981 (Z NOTATION
+    SPOT) so the list structure is still visually obvious."""
+    if not s:
+        return s
+    s = _MD_BULLET_RE.sub("\\1    ⦁ ", s)
+    s = _MD_HEADER_RE.sub("", s)
+    s = _MD_BOLD_STAR_RE.sub(r"\1", s)
+    s = _MD_BOLD_UNDER_RE.sub(r"\1", s)
+    s = _MD_ITALIC_STAR_RE.sub(r"\1", s)
+    s = _MD_ITALIC_UNDER_RE.sub(r"\1", s)
+    s = _MD_CODE_RE.sub(r"\1", s)
+    s = _MD_LINK_RE.sub(r"\1 (\2)", s)
+    return s
+
+
+def _clean_for_strava(s):
+    return _strip_markdown(_repair_mojibake(s)) if s else s
 
 
 class FitnessMCPClient:
