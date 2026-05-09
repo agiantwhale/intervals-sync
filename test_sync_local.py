@@ -1,3 +1,4 @@
+import sys
 import unittest
 from unittest.mock import patch
 from datetime import datetime
@@ -11,13 +12,19 @@ from sync_hevy import sync_hevy
 from src.api.fitness_mcp import MCPHevyAPI, MCPIntervalsAPI, MCPNightscoutAPI
 
 class TestHevySync(unittest.TestCase):
+    def setUp(self):
+        # sync_hevy() calls parse_args(sys.argv[1:]) on entry; unittest's own
+        # argv would otherwise trigger SystemExit on unknown flags.
+        argv_patch = patch.object(sys, "argv", ["sync_hevy"])
+        argv_patch.start()
+        self.addCleanup(argv_patch.stop)
+
     @patch('sync_hevy.MCPHevyAPI')
     @patch('sync_hevy.MCPIntervalsAPI')
-    def test_sync_matching_logic(self, MockIntervals, MockHevy):
-        # Setup Hevy Mock
+    def test_sync_creates_event_with_external_id_and_pairs_activity(self, MockIntervals, MockHevy):
         hevy_inst = MockHevy.return_value
         workout_start = "2024-05-04T10:00:00Z"
-        workout_end = "2024-05-04T11:00:00Z" # 3600s
+        workout_end = "2024-05-04T11:00:00Z"  # 3600s
         hevy_inst.get_recent_workouts.return_value = [{
             "id": "workout_123",
             "start_time": workout_start,
@@ -26,40 +33,46 @@ class TestHevySync(unittest.TestCase):
             "exercises": [
                 {
                     "title": "Squat",
-                    "sets": [{"weight_kg": 100, "reps": 5, "set_type": "normal"}]
+                    "sets": [{"weight_kg": 100, "reps": 5, "set_type": "normal"}],
                 }
-            ]
+            ],
         }]
 
-        # Setup Intervals Mock
         intervals_inst = MockIntervals.return_value
-        # Mock an activity that matches by time and duration
-        intervals_inst.get_activities.return_value = [
-            {
-                "id": "intervals_999",
-                "start_date": "2024-05-04T10:00:10Z", # 10s difference
-                "elapsed_time": 3595,                 # 5s difference
-                "name": "Morning Gym",
-                "type": "WeightTraining",
-                "external_id": None
-            }
-        ]
+        intervals_inst.get_activities.return_value = [{
+            "id": "intervals_999",
+            "start_date": "2024-05-04T10:00:10Z",  # 10s diff
+            "elapsed_time": 3595,                  # 5s diff
+            "name": "Morning Gym",
+            "type": "WeightTraining",
+            "external_id": None,
+            "paired_event_id": None,
+            "start_date_local": "2024-05-04T10:00:00",
+        }]
+        intervals_inst.create_event.return_value = {"id": 5000}
 
-        # Run sync
         sync_hevy()
 
-        # Verify update was called for the matched activity
-        intervals_inst.update_activity.assert_called_once()
-        args, kwargs = intervals_inst.update_activity.call_args
-        activity_id, payload = args
-        
+        # Event holds the workout content + hidden external_id; no marker in description.
+        intervals_inst.create_event.assert_called_once()
+        event_payload = intervals_inst.create_event.call_args.args[0]
+        self.assertEqual(event_payload["name"], "Leg Day")
+        self.assertEqual(event_payload["external_id"], "hevy-workout_123")
+        self.assertIn("### Squat", event_payload["description"])
+        self.assertIn("100kg x 5", event_payload["description"])
+        self.assertNotIn("[hevy-event:", event_payload["description"])
+
+        # Activity is paired to the new event, then its body fields are set
+        # (name/external_id/kg_lifted) with description cleared.
+        self.assertEqual(intervals_inst.update_activity.call_count, 2)
+        pair_call, body_call = intervals_inst.update_activity.call_args_list
+        self.assertEqual(pair_call.args, ("intervals_999", {"paired_event_id": 5000}))
+        activity_id, body_payload = body_call.args
         self.assertEqual(activity_id, "intervals_999")
-        self.assertEqual(payload["name"], "Leg Day")
-        self.assertEqual(payload["external_id"], "hevy-workout_123")
-        self.assertEqual(payload["kg_lifted"], 500)
-        self.assertIn("### Squat", payload["description"])
-        self.assertIn("100kg × 5", payload["description"])
-        print("\nTest passed: Successfully matched by time/duration and updated activity.")
+        self.assertEqual(body_payload["name"], "Leg Day")
+        self.assertEqual(body_payload["external_id"], "hevy-workout_123")
+        self.assertEqual(body_payload["kg_lifted"], 500)
+        self.assertEqual(body_payload["description"], "")
 
     @patch('sync_hevy.MCPHevyAPI')
     @patch('sync_hevy.MCPIntervalsAPI')
@@ -72,7 +85,7 @@ class TestHevySync(unittest.TestCase):
             "start_time": workout_start,
             "end_time": workout_end,
             "title": "Upper Body",
-            "exercises": []
+            "exercises": [],
         }]
 
         intervals_inst = MockIntervals.return_value
@@ -83,7 +96,9 @@ class TestHevySync(unittest.TestCase):
                 "elapsed_time": 3605,
                 "name": "Lower Body",
                 "type": "WeightTraining",
-                "external_id": None
+                "external_id": None,
+                "paired_event_id": None,
+                "start_date_local": "2024-05-04T10:00:00",
             },
             {
                 "id": "right_title",
@@ -91,17 +106,22 @@ class TestHevySync(unittest.TestCase):
                 "elapsed_time": 3590,
                 "name": " upper   body ",
                 "type": "WeightTraining",
-                "external_id": None
-            }
+                "external_id": None,
+                "paired_event_id": None,
+                "start_date_local": "2024-05-04T10:00:00",
+            },
         ]
+        intervals_inst.create_event.return_value = {"id": 6000}
 
         sync_hevy()
 
-        intervals_inst.update_activity.assert_called_once()
-        activity_id, payload = intervals_inst.update_activity.call_args.args
-        self.assertEqual(activity_id, "right_title")
-        self.assertEqual(payload["name"], "Upper Body")
-        self.assertNotIn("kg_lifted", payload)
+        # Title match wins → "right_title" gets paired and body-updated.
+        self.assertEqual(intervals_inst.update_activity.call_count, 2)
+        for call in intervals_inst.update_activity.call_args_list:
+            self.assertEqual(call.args[0], "right_title")
+        body_payload = intervals_inst.update_activity.call_args_list[-1].args[1]
+        self.assertEqual(body_payload["name"], "Upper Body")
+        self.assertNotIn("kg_lifted", body_payload)
 
     @patch('sync_hevy.MCPHevyAPI')
     @patch('sync_hevy.MCPIntervalsAPI')
@@ -114,7 +134,7 @@ class TestHevySync(unittest.TestCase):
             "start_time": workout_start,
             "end_time": workout_end,
             "title": "Leg Day",
-            "exercises": []
+            "exercises": [],
         }]
 
         intervals_inst = MockIntervals.return_value
@@ -125,13 +145,58 @@ class TestHevySync(unittest.TestCase):
                 "elapsed_time": 3595,
                 "name": "Morning Run",
                 "type": "Run",
-                "external_id": None
+                "external_id": None,
             }
         ]
 
         sync_hevy()
 
         intervals_inst.update_activity.assert_not_called()
+        intervals_inst.create_event.assert_not_called()
+
+    @patch('sync_hevy.MCPHevyAPI')
+    @patch('sync_hevy.MCPIntervalsAPI')
+    def test_sync_migrates_legacy_marker_event_to_external_id(self, MockIntervals, MockHevy):
+        hevy_inst = MockHevy.return_value
+        hevy_inst.get_recent_workouts.return_value = [{
+            "id": "workout_legacy",
+            "start_time": "2024-05-04T10:00:00Z",
+            "end_time": "2024-05-04T11:00:00Z",
+            "title": "Leg Day",
+            "exercises": [],
+        }]
+
+        intervals_inst = MockIntervals.return_value
+        intervals_inst.get_activities.return_value = [{
+            "id": "intervals_legacy",
+            "start_date": "2024-05-04T10:00:00Z",
+            "elapsed_time": 3600,
+            "name": "Leg Day",
+            "type": "WeightTraining",
+            "external_id": "hevy-workout_legacy",
+            "kg_lifted": None,
+            "paired_event_id": 7777,
+            "start_date_local": "2024-05-04T10:00:00",
+        }]
+        # Existing event has the old marker stamped into description, no external_id yet.
+        intervals_inst.get_event.return_value = {
+            "id": 7777,
+            "name": "Leg Day",
+            "description": "### Squat\n  - 100kg x 5\n\n[hevy-event:workout_legacy]",
+            "external_id": None,
+            "start_date_local": "2024-05-04T10:00:00",
+        }
+
+        sync_hevy()
+
+        # Recognizes the legacy event via the marker fallback and re-PUTs to set
+        # external_id + clean description.
+        intervals_inst.update_event.assert_called_once()
+        event_id, event_payload = intervals_inst.update_event.call_args.args
+        self.assertEqual(event_id, 7777)
+        self.assertEqual(event_payload["external_id"], "hevy-workout_legacy")
+        self.assertNotIn("[hevy-event:", event_payload["description"])
+        intervals_inst.create_event.assert_not_called()
 
 
 class FakeMCPClient:

@@ -67,13 +67,15 @@ def render_description(workout):
     return _ascii_clean("\n".join(lines).strip())
 
 
-def event_marker(workout):
+def event_external_id(workout):
+    return f"hevy-{workout['id']}"
+
+
+def legacy_event_marker(workout):
+    # Pre-external_id sync runs stamped this marker into the event description
+    # for "is this our event" detection. Kept only as a fallback so existing
+    # paired events get recognized + migrated to external_id on next sync.
     return f"[hevy-event:{workout['id']}]"
-
-
-def render_event_description(workout):
-    desc = render_description(workout)
-    return f"{desc}\n\n{event_marker(workout)}"
 
 
 def is_strength_activity(activity):
@@ -150,8 +152,8 @@ def sync_workout(intervals, workout, intervals_activities):
     activity_id = match["id"]
     title = workout_title(workout)
     kg_lifted = calculate_kg_lifted(workout)
-    marker = event_marker(workout)
-    desired_event_desc = render_event_description(workout)
+    hevy_ext_id = event_external_id(workout)
+    desired_event_desc = render_description(workout)
 
     paired_id = match.get("paired_event_id")
     paired_event = None
@@ -161,13 +163,18 @@ def sync_workout(intervals, workout, intervals_activities):
         except Exception as e:
             print(f"   Could not fetch paired event {paired_id}: {e}", file=sys.stderr)
 
-    is_our_event = paired_event and marker in (paired_event.get("description") or "")
+    paired_desc = (paired_event.get("description") or "") if paired_event else ""
+    paired_ext = (paired_event.get("external_id") or "") if paired_event else ""
+    is_our_event = paired_event and (
+        paired_ext == hevy_ext_id or legacy_event_marker(workout) in paired_desc
+    )
 
     # 1. Find / create / update the paired event
     if is_our_event:
         needs_update = (
-            (paired_event.get("description") or "").strip() != desired_event_desc.strip()
+            paired_desc.strip() != desired_event_desc.strip()
             or paired_event.get("name") != title
+            or paired_ext != hevy_ext_id  # migrates legacy events from marker → external_id
         )
         if needs_update:
             try:
@@ -177,6 +184,7 @@ def sync_workout(intervals, workout, intervals_activities):
                     "start_date_local": paired_event.get("start_date_local"),
                     "name": title,
                     "description": desired_event_desc,
+                    "external_id": hevy_ext_id,
                 })
                 print(f" - Hevy {workout['id']}: updated paired event {paired_id}.")
             except Exception as e:
@@ -199,6 +207,7 @@ def sync_workout(intervals, workout, intervals_activities):
                 "name": title,
                 "description": desired_event_desc,
                 "moving_time": duration,
+                "external_id": hevy_ext_id,
             })
         except Exception as e:
             print(f" - Hevy {workout['id']}: event create failed: {e}", file=sys.stderr)
