@@ -189,9 +189,9 @@ def sync_backfill(count=None, days=None):
     if not starts:
         print("No usable start_date on any returned run; nothing to match.")
         return
-    oldest_start = min(starts)
-    oldest = (oldest_start - timedelta(days=2)).strftime("%Y-%m-%d")
-    intervals_activities = intervals.get_activities(oldest=oldest)
+    oldest = (min(starts) - timedelta(days=2)).strftime("%Y-%m-%d")
+    newest = (max(starts) + timedelta(days=2)).strftime("%Y-%m-%d")
+    intervals_activities = intervals.get_activities(oldest=oldest, newest=newest)
     print(f"Fetched {len(intervals_activities)} Intervals.icu activities for matching.")
 
     for s_act in runs:
