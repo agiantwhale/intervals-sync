@@ -146,12 +146,21 @@ class FitnessMCPClient:
         r.raise_for_status()
         if not r.content:
             return {}
+        # requests defaults to ISO-8859-1 for text/event-stream when the server
+        # omits a charset (RFC 2616 legacy). The MCP worker emits UTF-8, so the
+        # default mojibakes multi-byte chars — and worse, can produce \x85 (NEL)
+        # mid-payload, which str.splitlines() treats as a line break and shreds
+        # the JSON. Force UTF-8 decoding here.
+        r.encoding = "utf-8"
         if r.headers.get("content-type", "").startswith("text/event-stream"):
             return self._parse_event_stream(r.text)
         return r.json()
 
     def _parse_event_stream(self, text):
-        for line in text.splitlines():
+        # Split on \n only — not str.splitlines(), which also splits on \v, \f,
+        # \x1c-\x1e, \x85,  ,  . Any of those appearing inside a JSON
+        # string in the payload would otherwise truncate the parse.
+        for line in text.split("\n"):
             if line.startswith("data:"):
                 data = line[5:].strip()
                 if data and data != "[DONE]":
