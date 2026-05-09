@@ -7,7 +7,8 @@ Modes:
 For each Strava run we look up the matching Intervals.icu activity (external_id
 first, then start-time + duration window). If that activity has a paired
 calendar event with a description, we mirror it into the Strava activity's
-description with a [strava-desc-sync:<event_id>] marker so re-runs no-op.
+description. Re-runs no-op via full-content equality against the current
+Strava description.
 """
 
 import os
@@ -17,7 +18,6 @@ from datetime import datetime, timedelta, timezone
 from src.api.fitness_mcp import MCPIntervalsAPI, MCPStravaAPI, _clean_for_strava, _parse_iso_utc
 
 
-SYNC_MARKER_PREFIX = "[strava-desc-sync:"
 STRAVA_RUN_TYPES = {"Run", "TrailRun", "VirtualRun"}
 MATCH_WINDOW_SECONDS = 120
 
@@ -76,10 +76,6 @@ def find_matching_intervals(strava_activity, intervals_activities):
     return title_match or candidates[0]
 
 
-def build_description(event_description, event_id):
-    return f"{event_description.rstrip()}\n\n{SYNC_MARKER_PREFIX}{event_id}]"
-
-
 def sync_one_activity(strava, intervals, strava_activity, intervals_activities):
     sid = strava_activity["id"]
 
@@ -115,15 +111,14 @@ def sync_one_activity(strava, intervals, strava_activity, intervals_activities):
     # Repair Intervals.icu mojibake, then strip Markdown (Strava renders the
     # description as plain text — bullets become "    ⦁ ", emphasis/headers/
     # code markers drop, links flatten to "label (url)").
-    desc = _clean_for_strava((event.get("description") or "").strip())
-    if not desc:
+    new_desc = _clean_for_strava((event.get("description") or "").strip())
+    if not new_desc:
         print(
             f" - Strava {sid} ↔ Intervals event {event_id}: "
             "event has no description. Skipping."
         )
         return
 
-    new_desc = build_description(desc, event_id)
     # SummaryActivity (from list_activities) lacks `description`; only the
     # detailed shape returned by get_activity has it. Refresh if missing so
     # idempotency comparisons aren't always against an empty string.
