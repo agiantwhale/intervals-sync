@@ -1,0 +1,30 @@
+name: Withings to Intervals Sync
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Runs every 15 minutes
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to scan"
+        required: false
+        default: "7"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: pip install requests
+      - name: Run Sync
+        env:
+          FITNESS_MCP_URL: ${{ secrets.FITNESS_MCP_URL }}
+          FITNESS_MCP_TOKEN: ${{ secrets.FITNESS_MCP_TOKEN }}
+          WITHINGS_SYNC_DAYS: ${{ inputs.days || '7' }}
+        run: python sync_withings.py

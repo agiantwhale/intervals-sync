@@ -1,7 +1,7 @@
 # intervals-sync
 
-Small Python sync jobs for keeping Intervals.icu activity data updated from
-Nightscout and Hevy.
+Small Python sync jobs for keeping Intervals.icu activity and wellness data
+updated from Nightscout, Hevy, and Withings.
 
 ## Sync Jobs
 
@@ -29,6 +29,18 @@ For matched activities it updates:
 
 GitHub Actions workflow: `.github/workflows/sync_hevy.yml`
 
+### Withings to Intervals
+
+`sync_withings.py` pulls recent Body Scan readings (weight, body fat %, body
+water, muscle mass, bone mass) from Withings and writes them to the matching
+Intervals.icu wellness day via `intervals_update_wellness`. For each local day
+in the lookback window, the latest reading wins. Body water is converted from
+kg to a percent of body weight (Intervals stores `BodyWater` as %), and muscle
+and bone are converted from kg to lb (`MuscleMassLB`, `BoneMassLB` are custom
+wellness fields and must already exist in the Intervals UI).
+
+GitHub Actions workflow: `.github/workflows/sync_withings.yml`
+
 ## Required Secrets
 
 Configure these GitHub Actions secrets:
@@ -38,8 +50,9 @@ Configure these GitHub Actions secrets:
 | `FITNESS_MCP_URL` | both | Optional fitness-mcp Worker URL |
 | `FITNESS_MCP_TOKEN` | both | Optional static bearer token for fitness-mcp |
 
-Both workflows run every 5 minutes and can also be run manually from GitHub
-Actions.
+The Nightscout and Hevy workflows run every 5 minutes; the Withings workflow
+runs every 15 minutes (Body Scan readings only fire 1–3×/day). All can also be
+run manually from GitHub Actions.
 
 The MCP server repository is [fitness-mcp](https://github.com/agiantwhale/fitness-mcp).
 
@@ -54,6 +67,7 @@ set +a
 
 .venv/bin/python sync_glucose.py
 .venv/bin/python sync_hevy.py
+.venv/bin/python sync_withings.py
 ```
 
 The only required runtime values are:
@@ -69,10 +83,14 @@ The Hevy lookback window defaults to 7 days. Override it with:
 HEVY_SYNC_DAYS=14 .venv/bin/python sync_hevy.py
 ```
 
+Withings has the same knob (`WITHINGS_SYNC_DAYS`, default 7) and an optional
+`WITHINGS_TZ` override (default `America/New_York`, only used if the Withings
+response itself doesn't carry a timezone).
+
 ## Development Checks
 
 ```bash
-.venv/bin/python -m py_compile sync_glucose.py sync_hevy.py src/api/*.py test_sync_local.py
+.venv/bin/python -m py_compile sync_glucose.py sync_hevy.py sync_withings.py src/api/*.py test_sync_local.py
 .venv/bin/python -m unittest test_sync_local.py
 ```
 

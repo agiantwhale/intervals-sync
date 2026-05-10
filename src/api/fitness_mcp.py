@@ -283,6 +283,9 @@ class MCPIntervalsAPI:
         args = {"eventId": str(event_id), **payload}
         return self.client.call_tool("intervals_update_event", args)
 
+    def update_wellness(self, body):
+        return self.client.call_tool("intervals_update_wellness", {"body": body})
+
 
 class MCPStravaAPI:
     def __init__(self, client=None):
@@ -320,6 +323,20 @@ class MCPStravaAPI:
             if v is not None:
                 payload[k] = v
         return self.client.call_tool("strava_update_activity", payload)
+
+
+class MCPWithingsAPI:
+    def __init__(self, client=None):
+        self.client = client or FitnessMCPClient()
+
+    def get_body_measurements(self, start_dt, end_dt, meastypes=None):
+        args = {
+            "startdate": int(start_dt.timestamp()),
+            "enddate": int(end_dt.timestamp()),
+        }
+        if meastypes:
+            args["meastypes"] = ",".join(str(t) for t in meastypes)
+        return self.client.call_tool("withings_get_measurements", args)
 
 
 class MCPNightscoutAPI:
