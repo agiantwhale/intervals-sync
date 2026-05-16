@@ -1,8 +1,9 @@
 name: Strava description backfill
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'  # Every 15 minutes
+  # Scheduled run disabled; trigger manually via workflow_dispatch if needed.
+  # schedule:
+  #   - cron: '*/15 * * * *'  # Every 15 minutes
   workflow_dispatch:
     inputs:
       count:
